@@ -104,9 +104,9 @@ By default, the harness uses a deterministic local LLM simulator so tests run wi
 To use an open-source model through LlamaIndex + Ollama:
 
 ```bash
-ollama pull llama3.1:8b
+ollama pull llama3.2:1b
 pip install llama-index llama-index-llms-ollama llama-index-embeddings-huggingface
-python3 eval_harness.py --token-budget 160 --llm-provider ollama --llm-model llama3.1:8b
+python3 eval_harness.py --token-budget 160 --llm-provider ollama --llm-model llama3.2:1b
 ```
 
 Fast local model run used in the report:
@@ -120,7 +120,7 @@ python3 -m venv .venv
 
 Recommended open-source setup:
 
-- LLM: `llama3.1:8b` via Ollama for local generation.
+- LLM: `llama3.2:1b` via Ollama for local generation.
 - Embeddings: `BAAI/bge-small-en-v1.5` via LlamaIndex `HuggingFaceEmbedding`.
 - Long-term memory: Qdrant.
 - Short-term memory and cache: Redis.
@@ -133,10 +133,39 @@ See `REPORT.md` for measured deterministic and LlamaIndex/Ollama results, win/ti
 
 For a complete diagrammed explanation of the system architecture, AI architecture, memory architecture, full end-to-end flow, evals, latency, and tests, see `docs/ARCHITECTURE_AND_EVALUATION.md`.
 
-## Next Production Steps
+## Production Adapters (Implemented)
 
-- Wire `RedisShortTermMemory` and `RedisCache` from `storage_adapters.py` to a real Redis instance.
-- Replace `LongTermMemory` with Qdrant using `QdrantLongTermMemory` from `storage_adapters.py`.
-- Replace `CrossEncoderReranker` with a production reranker such as bge-reranker, Jina reranker, Cohere Rerank, or a small cross-encoder.
-- Add human/LLM judge calibration for win/tie/loss labels.
-- Persist memory index versions in Redis or Postgres so cache invalidation survives restarts.
+All production storage and reranking adapters are implemented in `storage_adapters.py` and `rerankers.py`. They are drop-in replacements for the local in-process defaults and require only a live service connection.
+
+| Component | Local default | Production adapter | File |
+| --- | --- | --- | --- |
+| Short-term memory | `ShortTermMemory` | `RedisShortTermMemory` | `storage_adapters.py` |
+| CAG cache | `TTLCache` | `RedisCache` (uses `SETEX`) | `storage_adapters.py` |
+| Long-term memory | `LongTermMemory` | `QdrantLongTermMemory` | `storage_adapters.py` |
+| Feedback store | `FeedbackStore` | `RedisFeedbackStore` | `storage_adapters.py` |
+| Embeddings | deterministic token vectors | `HashEmbedding` (CI) / `LlamaIndexHuggingFaceEmbeddingConfig` | `storage_adapters.py` / `llamaindex_llm.py` |
+| Reranker | `CrossEncoderReranker` | `SentenceTransformersCrossEncoderReranker` | `rerankers.py` |
+| Memory index version | in-process dict | persisted in Redis via `incr` / `get` | `storage_adapters.py` |
+
+### Swap to Redis + Qdrant
+
+```python
+import redis
+from qdrant_client import QdrantClient
+from storage_adapters import HashEmbedding, QdrantLongTermMemory, RedisCache, RedisShortTermMemory
+
+r = redis.Redis(host="localhost", port=6379)
+short = RedisShortTermMemory(r, max_messages=12)
+cache = RedisCache(r, ttl_seconds=300)
+long = QdrantLongTermMemory(QdrantClient(host="localhost", port=6333), HashEmbedding(), redis_client=r)
+```
+
+### Swap to real cross-encoder reranker
+
+```python
+from rerankers import SentenceTransformersCrossEncoderReranker
+reranker = SentenceTransformersCrossEncoderReranker("cross-encoder/ms-marco-MiniLM-L-6-v2")
+optimizer = ContextOptimizer(short, long, cache, reranker=reranker)
+```
+
+Memory index versions are persisted in Redis automatically when a `redis_client` is passed to `QdrantLongTermMemory`, so cache invalidation survives restarts.
