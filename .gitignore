@@ -1,0 +1,42 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store
+
+# Env / secrets
+.env
+.env.*
+*.key
+*.pem
+
+# Eval output
+ollama_eval_latest.json
+*.eval.json
+
+# Sample data & corpora
+data/
+sample_data/
+samples/
+*_sample.*
+shakespeare/
+shakespeare*.txt
+shakespeare*.json
+*.corpus.txt
+
+# Build artefacts
+scripts/architecture_pdf/
+scripts/pipeline_test_results.json
+
+# Editor
+.vscode/
+.idea/
+*.swp

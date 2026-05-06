@@ -1,0 +1,11 @@
+llama-index
+llama-index-llms-ollama
+llama-index-embeddings-huggingface
+qdrant-client
+redis
+sentence-transformers
+fastapi
+uvicorn[standard]
+pydantic
+langchain
+langchain-core

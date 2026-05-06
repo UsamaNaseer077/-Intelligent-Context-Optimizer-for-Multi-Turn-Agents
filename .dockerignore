@@ -1,0 +1,12 @@
+.venv
+__pycache__
+*.pyc
+.DS_Store
+build
+docs/*.pdf
+*.json
+*.log
+.git
+.pytest_cache
+.mypy_cache
+.ruff_cache
